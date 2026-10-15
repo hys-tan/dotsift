@@ -15,7 +15,7 @@ export interface ExtensionStat {
 }
 
 export interface ScanResult {
-  root_path: string;
+  root_paths: string[];
   total_files: number;
   total_size_bytes: number;
   duration_ms: number;

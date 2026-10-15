@@ -1,99 +1,132 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Header } from "./components/Header";
-import { ExtensionChips } from "./components/ExtensionChips";
+import { SetupView } from "./components/SetupView";
 import { SearchBar } from "./components/SearchBar";
 import { FileListTable } from "./components/FileListTable";
 import { FileItem, ScanResult, SortField, SortOrder } from "./types";
-import { AlertCircle } from "lucide-react";
+import { ArrowLeft, Folder } from "lucide-react";
+import "./App.css";
 
 export function App() {
-  const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<"setup" | "results">("setup");
+
+  // Estado de directorios (hasta 5)
+  const [directories, setDirectories] = useState<string[]>([]);
+  const [selectedExtension, setSelectedExtension] = useState<string | null>(null);
+
+  // Escaneo y resultados
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [scanProgressDuration, setScanProgressDuration] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Filtros y ordenamiento
-  const [selectedExtension, setSelectedExtension] = useState<string | null>(null);
+  // Archivos cargados para la vista de resultados
+  const [loadedFiles, setLoadedFiles] = useState<FileItem[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
-  // Lista de archivos cargados desde Rust para la extensión actual
-  const [loadedFiles, setLoadedFiles] = useState<FileItem[]>([]);
-  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
+  const scanTimerRef = useRef<number | null>(null);
 
-  // Escanear un directorio dado
-  const startScan = useCallback(async (path: string) => {
+  // Función de escaneo
+  const executeScan = useCallback(async (pathsToScan: string[]): Promise<ScanResult | null> => {
+    if (pathsToScan.length === 0) {
+      setScanResult(null);
+      setLoadedFiles([]);
+      return null;
+    }
+
     try {
       setIsScanning(true);
       setErrorMsg(null);
-      setCurrentPath(path);
-      setSelectedExtension(null);
-      setSearchQuery("");
+      setScanProgressDuration(0);
 
-      const result = await invoke<ScanResult>("scan_directory", { path });
+      const startTime = Date.now();
+      scanTimerRef.current = window.setInterval(() => {
+        setScanProgressDuration(Date.now() - startTime);
+      }, 50);
+
+      const result = await invoke<ScanResult>("scan_directories", { paths: pathsToScan });
       setScanResult(result);
-
-      // Cargar lista inicial
-      setIsLoadingFiles(true);
-      const files = await invoke<FileItem[]>("get_filtered_files", {
-        extension: null,
-        searchQuery: null,
-      });
-      setLoadedFiles(files);
+      return result;
     } catch (err: unknown) {
-      console.error("Error al escanear directorio:", err);
-      setErrorMsg(typeof err === "string" ? err : "Ocurrió un error al escanear la carpeta.");
+      console.error("Error al escanear directorios:", err);
+      setErrorMsg(typeof err === "string" ? err : "Error al procesar las carpetas.");
+      return null;
     } finally {
+      if (scanTimerRef.current) {
+        clearInterval(scanTimerRef.current);
+        scanTimerRef.current = null;
+      }
       setIsScanning(false);
-      setIsLoadingFiles(false);
     }
   }, []);
 
-  // Seleccionar carpeta mediante diálogo nativo de Windows
-  const handleSelectDirectory = async () => {
+  // Agregar una carpeta (hasta 5)
+  const handleAddDirectory = async () => {
+    if (directories.length >= 5) return;
+
     try {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "Seleccionar Carpeta para Escanear",
+        title: "Seleccionar Carpeta para DotSift",
       });
 
       if (selected && typeof selected === "string") {
-        await startScan(selected);
+        if (!directories.includes(selected)) {
+          const newDirs = [...directories, selected];
+          setDirectories(newDirs);
+          await executeScan(newDirs);
+        }
       }
     } catch (err) {
       console.error("Error al abrir diálogo de selección:", err);
     }
   };
 
-  // Re-escanear directorio actual
-  const handleRescan = () => {
-    if (currentPath) {
-      startScan(currentPath);
+  // Quitar una carpeta
+  const handleRemoveDirectory = async (index: number) => {
+    const updated = directories.filter((_, i) => i !== index);
+    setDirectories(updated);
+    if (updated.length > 0) {
+      await executeScan(updated);
+    } else {
+      setScanResult(null);
+      setLoadedFiles([]);
     }
   };
 
-  // Cancelar escaneo
-  const handleCancelScan = async () => {
+  // Iniciar la exploración (cambiar a Vista 2)
+  const handleStartExplore = async () => {
+    if (directories.length === 0) return;
+
+    // Si aún no se ha escaneado, se escanea
+    if (!scanResult) {
+      await executeScan(directories);
+    }
+
     try {
-      await invoke("cancel_scan");
-      setIsScanning(false);
+      const files = await invoke<FileItem[]>("get_filtered_files", {
+        extension: selectedExtension,
+        searchQuery: null,
+      });
+      setLoadedFiles(files);
+      // Cambio instantáneo de vista tras completar el escaneo
+      setCurrentView("results");
     } catch (err) {
-      console.error("Error al cancelar escaneo:", err);
+      console.error("Error al cargar archivos:", err);
     }
   };
 
-  // Consultar archivos en memoria en Rust cuando cambia la extensión seleccionada
+  // Consultar archivos al cambiar de extensión en la Vista 2
   useEffect(() => {
-    if (!currentPath || isScanning) return;
+    if (currentView !== "results" || directories.length === 0) return;
 
     let isMounted = true;
-    const fetchExtensionFiles = async () => {
+    const fetchFiles = async () => {
       try {
-        setIsLoadingFiles(true);
         const files = await invoke<FileItem[]>("get_filtered_files", {
           extension: selectedExtension,
           searchQuery: null,
@@ -103,32 +136,23 @@ export function App() {
         }
       } catch (err) {
         console.error("Error al obtener archivos por extensión:", err);
-      } finally {
-        if (isMounted) setIsLoadingFiles(false);
       }
     };
 
-    fetchExtensionFiles();
-
+    fetchFiles();
     return () => {
       isMounted = false;
     };
-  }, [selectedExtension, currentPath, isScanning]);
+  }, [selectedExtension, currentView, directories]);
 
-  // Filtrado y ordenamiento reactivo en memoria (cliente)
-  const sortedAndFilteredFiles = useMemo(() => {
-    let result = loadedFiles;
-
-    // Filtro por texto en el cliente para latencia instantánea
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter((file) => file.name.toLowerCase().includes(q));
-    }
-
-    // Ordenamiento
-    const sorted = [...result].sort((a, b) => {
+  // Filtrado y ordenamiento en cliente para Vista 2
+  const sortedAndFilteredFiles = loadedFiles
+    .filter((f) =>
+      searchQuery.trim() ? f.name.toLowerCase().includes(searchQuery.toLowerCase().trim()) : true
+    )
+    .sort((a, b) => {
       if (sortField === "name") {
-        const cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+        const cmp = a.name.localeCompare(b.name, undefined, { numeric: true });
         return sortOrder === "asc" ? cmp : -cmp;
       }
       if (sortField === "size") {
@@ -142,9 +166,6 @@ export function App() {
       return 0;
     });
 
-    return sorted;
-  }, [loadedFiles, searchQuery, sortField, sortOrder]);
-
   const handleSortChange = (field: SortField) => {
     if (sortField === field) {
       setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -154,7 +175,6 @@ export function App() {
     }
   };
 
-  // Acciones sobre archivos del sistema operativo
   const handleOpenFile = async (path: string) => {
     try {
       await invoke("open_file_default", { path });
@@ -172,67 +192,78 @@ export function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans select-none">
-      {/* Header superior */}
-      <Header
-        currentPath={currentPath}
-        scanResult={scanResult}
-        isScanning={isScanning}
-        onSelectDirectory={handleSelectDirectory}
-        onRescan={handleRescan}
-        onCancelScan={handleCancelScan}
-      />
-
-      {/* Banner de error si ocurre alguno */}
-      {errorMsg && (
-        <div className="bg-red-950/80 border-b border-red-800/80 px-5 py-2.5 flex items-center justify-between text-xs text-red-200">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-            <span>{errorMsg}</span>
-          </div>
-          <button
-            onClick={() => setErrorMsg(null)}
-            className="text-red-400 hover:text-red-100 font-semibold cursor-pointer"
-          >
-            Cerrar
-          </button>
-        </div>
-      )}
-
-      {/* Chips de Extensiones (solo visible tras escanear) */}
-      {scanResult && (
-        <ExtensionChips
-          extensions={scanResult.extensions}
+    <div className="flex flex-col h-screen w-screen bg-[#0f1117] text-zinc-100 overflow-hidden font-sans select-none">
+      {/* VISTA 1: Pantalla de Configuración Inicial */}
+      {currentView === "setup" && (
+        <SetupView
+          directories={directories}
+          onAddDirectory={handleAddDirectory}
+          onRemoveDirectory={handleRemoveDirectory}
           selectedExtension={selectedExtension}
           onSelectExtension={setSelectedExtension}
-          totalFiles={scanResult.total_files}
+          scanResult={scanResult}
+          isScanning={isScanning}
+          scanProgressDuration={scanProgressDuration}
+          onStartExplore={handleStartExplore}
+          errorMsg={errorMsg}
+          onClearError={() => setErrorMsg(null)}
         />
       )}
 
-      {/* Barra de Búsqueda reactiva (solo si hay carpeta cargada) */}
-      {scanResult && (
-        <SearchBar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          filteredCount={sortedAndFilteredFiles.length}
-          totalInExtension={loadedFiles.length}
-          selectedExtension={selectedExtension}
-          sortField={sortField}
-          sortOrder={sortOrder}
-          onSortChange={handleSortChange}
-        />
-      )}
+      {/* VISTA 2: Pantalla de Contenido y Exploración */}
+      {currentView === "results" && (
+        <div className="flex-1 flex flex-col h-full overflow-hidden animate-fadeIn">
+          {/* Barra superior de Vista 2 */}
+          <div className="border-b border-zinc-800/80 bg-zinc-950/70 backdrop-blur-md px-5 py-3 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setCurrentView("setup")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-300 border border-zinc-800 hover:bg-zinc-800 hover:text-white transition-all cursor-pointer shadow-sm"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Volver a DotSift</span>
+              </button>
 
-      {/* Tabla Virtualizada */}
-      <FileListTable
-        files={sortedAndFilteredFiles}
-        searchQuery={searchQuery}
-        isScanning={isScanning || isLoadingFiles}
-        hasRootSelected={currentPath !== null}
-        onOpenFile={handleOpenFile}
-        onOpenFolder={handleOpenFolder}
-        onSelectDirectory={handleSelectDirectory}
-      />
+              <div className="h-4 w-[1px] bg-zinc-800" />
+
+              <div className="flex items-center gap-2 text-xs text-zinc-400">
+                <Folder className="w-3.5 h-3.5 text-indigo-400" />
+                <span>
+                  {directories.length} {directories.length === 1 ? "carpeta" : "carpetas"} analizadas
+                </span>
+                {selectedExtension && (
+                  <span className="font-mono text-indigo-300 font-semibold">
+                    (Tipo: .{selectedExtension.toUpperCase()})
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Barra de búsqueda */}
+          <SearchBar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            filteredCount={sortedAndFilteredFiles.length}
+            totalInExtension={loadedFiles.length}
+            selectedExtension={selectedExtension}
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onSortChange={handleSortChange}
+          />
+
+          {/* Tabla de archivos */}
+          <FileListTable
+            files={sortedAndFilteredFiles}
+            searchQuery={searchQuery}
+            isScanning={false}
+            hasRootSelected={directories.length > 0}
+            onOpenFile={handleOpenFile}
+            onOpenFolder={handleOpenFolder}
+            onSelectDirectory={handleAddDirectory}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AudioFileFilter",
+  "productName": "DotSift",
   "version": "0.1.0",
-  "identifier": "com.kened.audiofilefilter",
+  "identifier": "com.kened.dotsift",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Audio & File Type Explorer",
+        "title": "DotSift",
         "width": 1200,
         "height": 800,
         "minWidth": 850,

@@ -27,7 +27,7 @@ pub struct ExtensionStat {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResult {
-    pub root_path: String,
+    pub root_paths: Vec<String>,
     pub total_files: usize,
     pub total_size_bytes: u64,
     pub duration_ms: u64,
@@ -37,7 +37,7 @@ pub struct ScanResult {
 pub struct ScannerState {
     pub files_by_extension: Mutex<HashMap<String, Vec<FileItem>>>,
     pub all_files: Mutex<Vec<FileItem>>,
-    pub current_root: Mutex<Option<String>>,
+    pub current_roots: Mutex<Vec<String>>,
     pub cancel_flag: Arc<AtomicBool>,
 }
 
@@ -46,7 +46,7 @@ impl ScannerState {
         Self {
             files_by_extension: Mutex::new(HashMap::new()),
             all_files: Mutex::new(Vec::new()),
-            current_root: Mutex::new(None),
+            current_roots: Mutex::new(Vec::new()),
             cancel_flag: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -64,16 +64,27 @@ pub fn categorize_extension(ext: &str) -> &'static str {
     }
 }
 
-pub fn perform_scan(
-    root: &str,
+pub fn perform_scan_multiple(
+    roots: &[String],
     cancel_flag: Arc<AtomicBool>,
 ) -> Result<(ScanResult, HashMap<String, Vec<FileItem>>, Vec<FileItem>), String> {
     cancel_flag.store(false, Ordering::Relaxed);
     let start_time = Instant::now();
-    let root_path = Path::new(root);
 
-    if !root_path.exists() || !root_path.is_dir() {
-        return Err("La ruta especificada no existe o no es un directorio válido.".to_string());
+    if roots.is_empty() {
+        return Err("No se especificó ninguna carpeta para escanear.".to_string());
+    }
+
+    let mut valid_roots: Vec<String> = Vec::new();
+    for r in roots {
+        let p = Path::new(r);
+        if p.exists() && p.is_dir() {
+            valid_roots.push(r.clone());
+        }
+    }
+
+    if valid_roots.is_empty() {
+        return Err("Ninguna de las carpetas seleccionadas existe o es válida.".to_string());
     }
 
     let mut files_by_extension: HashMap<String, Vec<FileItem>> = HashMap::new();
@@ -81,80 +92,79 @@ pub fn perform_scan(
     let mut total_size_bytes: u64 = 0;
     let mut current_id: usize = 0;
 
-    // Recorrido recursivo ultra-rápido ignorando errores de permisos silenciosamente
-    for entry_result in WalkDir::new(root_path)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(|e| {
-            // Evitar carpetas de sistema problemáticas o enlaces circulares
-            let file_name = e.file_name().to_string_lossy();
-            !file_name.eq_ignore_ascii_case("$RECYCLE.BIN")
-                && !file_name.eq_ignore_ascii_case("System Volume Information")
-        })
-    {
-        // Comprobar si el usuario canceló el escaneo
-        if current_id % 1000 == 0 && cancel_flag.load(Ordering::Relaxed) {
-            return Err("Escaneo cancelado por el usuario.".to_string());
-        }
+    for root_dir in &valid_roots {
+        let root_path = Path::new(root_dir);
 
-        let entry = match entry_result {
-            Ok(e) => e,
-            Err(_) => continue, // Salta permisos denegados sin romper el escaneo
-        };
-
-        // Solo procesar archivos (no directorios ni enlaces simbólicos)
-        if !entry.file_type().is_file() {
-            continue;
-        }
-
-        let path = entry.path();
-        let file_name = entry.file_name().to_string_lossy().to_string();
-
-        let ext = match path.extension() {
-            Some(os_ext) => os_ext.to_string_lossy().to_lowercase(),
-            None => "[sin extensión]".to_string(),
-        };
-
-        let metadata = match entry.metadata() {
-            Ok(m) => m,
-            Err(_) => {
-                match fs::metadata(path) {
-                    Ok(m) => m,
-                    Err(_) => continue,
-                }
+        for entry_result in WalkDir::new(root_path)
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(|e| {
+                let file_name = e.file_name().to_string_lossy();
+                !file_name.eq_ignore_ascii_case("$RECYCLE.BIN")
+                    && !file_name.eq_ignore_ascii_case("System Volume Information")
+            })
+        {
+            if current_id % 1000 == 0 && cancel_flag.load(Ordering::Relaxed) {
+                return Err("Escaneo cancelado por el usuario.".to_string());
             }
-        };
 
-        let size = metadata.len();
-        total_size_bytes += size;
+            let entry = match entry_result {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
 
-        let modified_ts = metadata
-            .modified()
-            .unwrap_or(UNIX_EPOCH)
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+            if !entry.file_type().is_file() {
+                continue;
+            }
 
-        let item = FileItem {
-            id: current_id,
-            name: file_name,
-            path: path.to_string_lossy().to_string(),
-            extension: ext.clone(),
-            size_bytes: size,
-            modified_timestamp: modified_ts,
-        };
+            let path = entry.path();
+            let file_name = entry.file_name().to_string_lossy().to_string();
 
-        current_id += 1;
-        files_by_extension
-            .entry(ext)
-            .or_insert_with(Vec::new)
-            .push(item.clone());
-        all_files.push(item);
+            let ext = match path.extension() {
+                Some(os_ext) => os_ext.to_string_lossy().to_lowercase(),
+                None => "[sin extensión]".to_string(),
+            };
+
+            let metadata = match entry.metadata() {
+                Ok(m) => m,
+                Err(_) => {
+                    match fs::metadata(path) {
+                        Ok(m) => m,
+                        Err(_) => continue,
+                    }
+                }
+            };
+
+            let size = metadata.len();
+            total_size_bytes += size;
+
+            let modified_ts = metadata
+                .modified()
+                .unwrap_or(UNIX_EPOCH)
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            let item = FileItem {
+                id: current_id,
+                name: file_name,
+                path: path.to_string_lossy().to_string(),
+                extension: ext.clone(),
+                size_bytes: size,
+                modified_timestamp: modified_ts,
+            };
+
+            current_id += 1;
+            files_by_extension
+                .entry(ext)
+                .or_insert_with(Vec::new)
+                .push(item.clone());
+            all_files.push(item);
+        }
     }
 
     let duration_ms = start_time.elapsed().as_millis() as u64;
 
-    // Calcular estadísticas por extensión
     let mut extensions: Vec<ExtensionStat> = files_by_extension
         .iter()
         .map(|(ext, items)| {
@@ -169,21 +179,11 @@ pub fn perform_scan(
         })
         .collect();
 
-    // Ordenar: primero los de audio con mayor conteo, luego los demás por conteo descendente
-    extensions.sort_by(|a, b| {
-        let a_is_audio = a.category == "audio";
-        let b_is_audio = b.category == "audio";
-        if a_is_audio && !b_is_audio {
-            std::cmp::Ordering::Less
-        } else if !a_is_audio && b_is_audio {
-            std::cmp::Ordering::Greater
-        } else {
-            b.count.cmp(&a.count)
-        }
-    });
+    // Ordenar de mayor a menor cantidad de archivos
+    extensions.sort_by(|a, b| b.count.cmp(&a.count));
 
     let summary = ScanResult {
-        root_path: root.to_string(),
+        root_paths: valid_roots,
         total_files: current_id,
         total_size_bytes,
         duration_ms,

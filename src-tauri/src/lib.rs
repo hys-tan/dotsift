@@ -5,31 +5,29 @@ use std::sync::atomic::Ordering;
 use tauri::State;
 
 #[tauri::command]
-async fn scan_directory(
-    path: String,
+async fn scan_directories(
+    paths: Vec<String>,
     state: State<'_, ScannerState>,
 ) -> Result<ScanResult, String> {
     let cancel_flag = state.cancel_flag.clone();
-    let root = path.clone();
+    let roots = paths.clone();
 
-    // Ejecutar en hilo de bloqueo para no congelar el runtime asíncrono
     let result = tauri::async_runtime::spawn_blocking(move || {
-        scanner::perform_scan(&root, cancel_flag)
+        scanner::perform_scan_multiple(&roots, cancel_flag)
     })
     .await
     .map_err(|e| format!("Error en el hilo de escaneo: {}", e))??;
 
     let (summary, files_by_ext, all) = result;
 
-    // Actualizar estado en memoria RAM
     if let Ok(mut ext_map) = state.files_by_extension.lock() {
         *ext_map = files_by_ext;
     }
     if let Ok(mut all_list) = state.all_files.lock() {
         *all_list = all;
     }
-    if let Ok(mut root_guard) = state.current_root.lock() {
-        *root_guard = Some(path);
+    if let Ok(mut roots_guard) = state.current_roots.lock() {
+        *roots_guard = paths;
     }
 
     Ok(summary)
@@ -123,7 +121,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            scan_directory,
+            scan_directories,
             cancel_scan,
             get_filtered_files,
             open_file_default,
