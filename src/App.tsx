@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -6,7 +6,8 @@ import { SetupView } from "./components/SetupView";
 import { SearchBar } from "./components/SearchBar";
 import { FileListTable } from "./components/FileListTable";
 import { FileItem, ScanResult, SortField, SortOrder } from "./types";
-import { ArrowLeft } from "lucide-react";
+import { formatBytes } from "./utils/formatters";
+import { ArrowLeft, RotateCcw } from "lucide-react";
 import "./App.css";
 
 export function App() {
@@ -261,6 +262,26 @@ export function App() {
     }
   };
 
+  // Opción para reiniciar a cero toda la aplicación
+  const handleResetAll = () => {
+    setDirectories([]);
+    directoriesRef.current = [];
+    setSelectedExtension(null);
+    setScanResult(null);
+    setLoadedFiles([]);
+    setSearchQuery("");
+    setCurrentView("setup");
+  };
+
+  // Cálculo del peso total y filtrado
+  const totalSizeBytes = useMemo(() => {
+    return loadedFiles.reduce((acc, f) => acc + f.size_bytes, 0);
+  }, [loadedFiles]);
+
+  const filteredSizeBytes = useMemo(() => {
+    return sortedAndFilteredFiles.reduce((acc, f) => acc + f.size_bytes, 0);
+  }, [sortedAndFilteredFiles]);
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[#fbf9f8] text-[#161513] overflow-hidden font-sans-oracle select-none">
       {/* VISTA 1: Pantalla de Configuración Inicial */}
@@ -285,28 +306,49 @@ export function App() {
       {currentView === "results" && (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
           {/* Barra superior de Vista 2 (Oracle masthead/subnav style) */}
-          <div className="border-b border-[#e4e1dd] bg-[#ffffff] px-6 py-3 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+          <div className="border-b border-[#e4e1dd] bg-[#ffffff] px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
+            {/* Opciones de retorno */}
+            <div className="flex items-center gap-2">
+              {/* Opción 1: Modificar filtro (conserva carpetas y escaneo) */}
               <button
                 onClick={() => setCurrentView("setup")}
-                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[4px] text-xs font-medium text-[#161513] border border-[#161513] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-medium text-[#161513] border border-[#d4cfca] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
+                title="Volver para cambiar extensión o carpetas conservando el escaneo"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Volver a DotSift</span>
+                <span>Modificar filtro</span>
               </button>
 
-              <div className="h-4 w-[1px] bg-[#e4e1dd]" />
+              {/* Opción 2: Nueva exploración (reinicia todo a cero) */}
+              <button
+                onClick={handleResetAll}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-medium text-[#767069] hover:text-[#c74634] border border-transparent hover:border-[#e4e1dd] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
+                title="Reiniciar a cero y comenzar una nueva exploración limpia"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Nueva exploración</span>
+              </button>
+            </div>
 
-              <div className="flex items-center gap-2 text-xs text-[#767069]">
-                <span className="font-sans-oracle">
-                  {directories.length} {directories.length === 1 ? "carpeta" : "carpetas"} analizadas
+            {/* Resumen contextual: carpetas, extensión y peso total */}
+            <div className="flex items-center gap-2.5 text-xs text-[#767069]">
+              <span className="font-sans-oracle font-medium text-[#161513]">
+                {directories.length} {directories.length === 1 ? "carpeta" : "carpetas"}
+              </span>
+              <span>•</span>
+              {selectedExtension ? (
+                <span className="font-mono-oracle text-[#006b8f] font-semibold">
+                  .{selectedExtension.toUpperCase()}
                 </span>
-                {selectedExtension && (
-                  <span className="font-mono-oracle text-[#006b8f] font-semibold">
-                    (Tipo: .{selectedExtension.toUpperCase()})
-                  </span>
-                )}
-              </div>
+              ) : (
+                <span className="font-sans-oracle">Todos los tipos</span>
+              )}
+              <span>•</span>
+              <span className="font-mono-oracle text-[#161513] font-medium">
+                {searchQuery
+                  ? `${formatBytes(filteredSizeBytes)} de ${formatBytes(totalSizeBytes)}`
+                  : `${formatBytes(totalSizeBytes)} en total`}
+              </span>
             </div>
           </div>
 

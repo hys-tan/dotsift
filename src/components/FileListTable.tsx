@@ -40,12 +40,15 @@ export const FileListTable: React.FC<FileListTableProps> = ({
   const parentRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
+  // Virtualizador incondicional
   const virtualizer = useVirtualizer({
     count: files.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 48,
     overscan: 12,
   });
+
+  const virtualItems = virtualizer.getVirtualItems();
 
   const handleCopyPath = (id: number, path: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -76,23 +79,27 @@ export const FileListTable: React.FC<FileListTableProps> = ({
 
   const highlightMatch = (text: string, query: string) => {
     if (!query.trim()) return text;
-    const parts = text.split(new RegExp(`(${query.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")})`, "gi"));
-    return (
-      <>
-        {parts.map((part, i) =>
-          part.toLowerCase() === query.toLowerCase() ? (
-            <mark key={i} className="bg-[#f7e0a1] text-[#161513] font-semibold px-0.5 rounded-[2px]">
-              {part}
-            </mark>
-          ) : (
-            part
-          )
-        )}
-      </>
-    );
+    try {
+      const parts = text.split(new RegExp(`(${query.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")})`, "gi"));
+      return (
+        <>
+          {parts.map((part, i) =>
+            part.toLowerCase() === query.toLowerCase() ? (
+              <mark key={i} className="bg-[#f7e0a1] text-[#161513] font-semibold px-0.5 rounded-[2px]">
+                {part}
+              </mark>
+            ) : (
+              part
+            )
+          )}
+        </>
+      );
+    } catch {
+      return text;
+    }
   };
 
-  // Estado 1: No hay carpetas seleccionadas
+  // Estado: No hay carpetas seleccionadas
   if (!hasRootSelected) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-[#fbf9f8] select-none font-sans-oracle">
@@ -114,7 +121,7 @@ export const FileListTable: React.FC<FileListTableProps> = ({
     );
   }
 
-  // Estado 2: Escaneando en segundo plano
+  // Estado: Escaneando en segundo plano
   if (isScanning) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-[#fbf9f8] select-none font-sans-oracle">
@@ -127,139 +134,143 @@ export const FileListTable: React.FC<FileListTableProps> = ({
     );
   }
 
-  // Estado 3: La búsqueda no arrojó resultados
-  if (files.length === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-[#fbf9f8] select-none font-sans-oracle">
-        <SearchX className="w-8 h-8 text-[#aea8a2] mb-3" />
-        <h3 className="text-sm font-bold text-[#161513] mb-1">No se encontraron archivos</h3>
-        <p className="text-xs text-[#767069]">
-          No hay elementos que coincidan con &quot;{searchQuery}&quot;.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#ffffff] select-none font-sans-oracle">
-      {/* Table Header (Oracle ex-data-table-cell: headerBackground canvas-tint #f5f4f2, headerTypography caption) */}
-      <div className="grid grid-cols-12 gap-4 px-6 py-2.5 text-xs font-bold text-[#161513] uppercase tracking-wider border-b border-[#e4e1dd] bg-[#f5f4f2]">
+    <div className="flex-1 flex flex-col min-h-0 bg-[#ffffff] select-none font-sans-oracle relative">
+      {/* Table Header (Oracle ex-data-table-cell: headerBackground canvas-tint #f5f4f2) */}
+      <div className="grid grid-cols-12 gap-4 px-6 py-2.5 text-xs font-bold text-[#161513] uppercase tracking-wider border-b border-[#e4e1dd] bg-[#f5f4f2] shrink-0">
         <div className="col-span-6 flex items-center gap-2">Nombre del Archivo</div>
         <div className="col-span-2">Extensión</div>
         <div className="col-span-2">Tamaño</div>
         <div className="col-span-2 text-right">Acciones</div>
       </div>
 
-      {/* Virtualized Container */}
-      <div
-        ref={parentRef}
-        className="flex-1 overflow-y-auto divide-y divide-[#e9e7e4] relative"
-      >
+      {/* Table Body Area */}
+      {files.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-12 text-center select-none font-sans-oracle">
+          <div className="w-12 h-12 rounded-[8px] bg-[#fbf9f8] border border-[#e4e1dd] flex items-center justify-center mb-3">
+            <SearchX className="w-6 h-6 text-[#aea8a2]" />
+          </div>
+          <h3 className="text-sm font-bold text-[#161513] mb-1">No se encontraron archivos</h3>
+          <p className="text-xs text-[#767069] max-w-sm leading-relaxed">
+            No hay ningún archivo que coincida con &quot;{searchQuery}&quot;. Puedes probar con otro nombre o pulsar{" "}
+            <kbd className="px-1.5 py-0.5 bg-[#f5f4f2] border border-[#e4e1dd] rounded-[3px] text-[10px] font-mono-oracle font-medium text-[#161513]">
+              Esc
+            </kbd>{" "}
+            para limpiar la búsqueda.
+          </p>
+        </div>
+      ) : (
+        /* Virtualized Container */
         <div
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-            width: "100%",
-            position: "relative",
-          }}
+          ref={parentRef}
+          className="flex-1 overflow-y-auto divide-y divide-[#e9e7e4] relative"
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const file = files[virtualRow.index];
-            const isCopied = copiedId === file.id;
-            const badge = getCategoryBadge(file.extension, "");
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {virtualItems.map((virtualRow) => {
+              const file = files[virtualRow.index];
+              const isCopied = copiedId === file.id;
+              const badge = getCategoryBadge(file.extension, "");
 
-            return (
-              <div
-                key={file.id}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: `${virtualRow.size}px`,
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-                onDoubleClick={() => onOpenFile(file.path)}
-                className="grid grid-cols-12 gap-4 px-6 py-2 items-center text-xs hover:bg-[#fbf9f8] transition-colors group cursor-pointer border-b border-[#e4e1dd]"
-              >
-                {/* Name & Path */}
-                <div className="col-span-6 flex items-center gap-3 min-w-0">
-                  {getFileIcon(file.extension)}
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="font-medium text-[#161513] truncate group-hover:text-[#006b8f] transition-colors"
-                      title={file.name}
+              return (
+                <div
+                  key={file.id}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                  onDoubleClick={() => onOpenFile(file.path)}
+                  className="grid grid-cols-12 gap-4 px-6 py-2 items-center text-xs hover:bg-[#fbf9f8] transition-colors group cursor-pointer border-b border-[#e4e1dd]"
+                >
+                  {/* Name & Path */}
+                  <div className="col-span-6 flex items-center gap-3 min-w-0">
+                    {getFileIcon(file.extension)}
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="font-medium text-[#161513] truncate group-hover:text-[#006b8f] transition-colors"
+                        title={file.name}
+                      >
+                        {highlightMatch(file.name, searchQuery)}
+                      </p>
+                      <p
+                        className="text-[11px] text-[#767069] truncate font-mono-oracle"
+                        title={file.path}
+                      >
+                        {file.path}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Extension Badge */}
+                  <div className="col-span-2 flex items-center">
+                    <span
+                      className={`px-2 py-0.5 rounded-[4px] text-[10px] font-mono-oracle font-semibold uppercase border ${badge.bg}`}
                     >
-                      {highlightMatch(file.name, searchQuery)}
-                    </p>
-                    <p
-                      className="text-[11px] text-[#767069] truncate font-mono-oracle"
-                      title={file.path}
+                      {file.extension === "[sin extensión]" ? "Ninguna" : file.extension}
+                    </span>
+                  </div>
+
+                  {/* Size & Date */}
+                  <div className="col-span-2 flex flex-col justify-center">
+                    <span className="font-mono-oracle text-[#161513] text-[11px] font-medium">
+                      {formatBytes(file.size_bytes)}
+                    </span>
+                    <span className="text-[10px] text-[#767069]">
+                      {formatDate(file.modified_timestamp)}
+                    </span>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="col-span-2 flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenFile(file.path);
+                      }}
+                      className="p-1.5 rounded-[4px] text-[#312d2a] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
+                      title="Abrir con aplicación predeterminada"
                     >
-                      {file.path}
-                    </p>
+                      <Play className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenFolder(file.path);
+                      }}
+                      className="p-1.5 rounded-[4px] text-[#312d2a] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
+                      title="Mostrar en el Explorador de Windows"
+                    >
+                      <FolderSymlink className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      onClick={(e) => handleCopyPath(file.id, file.path, e)}
+                      className="p-1.5 rounded-[4px] text-[#312d2a] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
+                      title="Copiar ruta absoluta"
+                    >
+                      {isCopied ? (
+                        <Check className="w-3.5 h-3.5 text-[#33553c]" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
                   </div>
                 </div>
-
-                {/* Extension Badge */}
-                <div className="col-span-2 flex items-center">
-                  <span
-                    className={`px-2 py-0.5 rounded-[4px] text-[10px] font-mono-oracle font-semibold uppercase border ${badge.bg}`}
-                  >
-                    {file.extension === "[sin extensión]" ? "Ninguna" : file.extension}
-                  </span>
-                </div>
-
-                {/* Size & Date */}
-                <div className="col-span-2 flex flex-col justify-center">
-                  <span className="font-mono-oracle text-[#161513] text-[11px] font-medium">
-                    {formatBytes(file.size_bytes)}
-                  </span>
-                  <span className="text-[10px] text-[#767069]">
-                    {formatDate(file.modified_timestamp)}
-                  </span>
-                </div>
-
-                {/* Actions */}
-                <div className="col-span-2 flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenFile(file.path);
-                    }}
-                    className="p-1.5 rounded-[4px] text-[#312d2a] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
-                    title="Abrir con aplicación predeterminada"
-                  >
-                    <Play className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenFolder(file.path);
-                    }}
-                    className="p-1.5 rounded-[4px] text-[#312d2a] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
-                    title="Mostrar en el Explorador de Windows"
-                  >
-                    <FolderSymlink className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    onClick={(e) => handleCopyPath(file.id, file.path, e)}
-                    className="p-1.5 rounded-[4px] text-[#312d2a] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
-                    title="Copiar ruta absoluta"
-                  >
-                    {isCopied ? (
-                      <Check className="w-3.5 h-3.5 text-[#33553c]" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

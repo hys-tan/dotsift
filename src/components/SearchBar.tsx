@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import { Search, X, ArrowUp, ArrowDown } from "lucide-react";
 import { SortField, SortOrder } from "../types";
 
@@ -23,31 +23,59 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   sortOrder,
   onSortChange,
 }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Atajos de teclado: Ctrl+F para enfocar, Escape para limpiar búsqueda
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      } else if (e.key === "Escape") {
+        if (searchQuery) {
+          e.preventDefault();
+          onSearchChange("");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [searchQuery, onSearchChange]);
+
   return (
     <div className="bg-[#ffffff] px-6 py-3 border-b border-[#e4e1dd] flex flex-wrap items-center justify-between gap-4 select-none font-sans-oracle">
       {/* Search Input (Oracle text-input styling: 1px field-border #d4cfca, 6px radius) */}
       <div className="relative flex-1 min-w-[260px] max-w-md">
         <Search className="w-4 h-4 text-[#aea8a2] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
+          ref={inputRef}
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={
             selectedExtension
-              ? `Buscar en .${selectedExtension}... (nombre o ruta)`
-              : "Buscar en todos los archivos..."
+              ? `Buscar en .${selectedExtension}... (Ctrl+F)`
+              : "Buscar archivos... (Ctrl+F)"
           }
-          className="w-full bg-[#ffffff] border border-[#d4cfca] focus:border-[#312d2a] rounded-[6px] pl-10 pr-8 py-2 text-xs text-[#161513] placeholder-[#aea8a2] focus:outline-none transition-colors"
+          className="w-full bg-[#ffffff] border border-[#d4cfca] focus:border-[#312d2a] rounded-[6px] pl-10 pr-16 py-2 text-xs text-[#161513] placeholder-[#aea8a2] focus:outline-none transition-colors"
         />
-        {searchQuery && (
-          <button
-            onClick={() => onSearchChange("")}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#aea8a2] hover:text-[#161513] p-1 cursor-pointer"
-            title="Limpiar búsqueda"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          {searchQuery ? (
+            <button
+              onClick={() => onSearchChange("")}
+              className="text-[#aea8a2] hover:text-[#161513] p-1 cursor-pointer"
+              title="Limpiar búsqueda (Esc)"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono-oracle text-[#767069] bg-[#f5f4f2] border border-[#e4e1dd] rounded-[3px]">
+              Ctrl F
+            </kbd>
+          )}
+        </div>
       </div>
 
       {/* Sorting & Counter */}
