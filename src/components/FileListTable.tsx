@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Play,
@@ -28,6 +28,12 @@ interface FileListTableProps {
   onSelectDirectory: () => void;
 }
 
+interface ContextMenuState {
+  file: FileItem;
+  x: number;
+  y: number;
+}
+
 export const FileListTable: React.FC<FileListTableProps> = ({
   files,
   searchQuery,
@@ -39,6 +45,7 @@ export const FileListTable: React.FC<FileListTableProps> = ({
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   // Virtualizador incondicional
   const virtualizer = useVirtualizer({
@@ -50,8 +57,43 @@ export const FileListTable: React.FC<FileListTableProps> = ({
 
   const virtualItems = virtualizer.getVirtualItems();
 
-  const handleCopyPath = (id: number, path: string, e: React.MouseEvent) => {
+  // Cerrar el menú contextual al hacer clic fuera o presionar Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const handleClickOutside = () => setContextMenu(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setContextMenu(null);
+      }
+    };
+
+    window.addEventListener("click", handleClickOutside);
+    window.addEventListener("contextmenu", handleClickOutside);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("click", handleClickOutside);
+      window.removeEventListener("contextmenu", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const handleRowContextMenu = (file: FileItem, e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
+
+    // Calcular posición para que no se desborde fuera de la pantalla
+    const menuWidth = 220;
+    const menuHeight = 150;
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 12);
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 12);
+
+    setContextMenu({ file, x, y });
+  };
+
+  const handleCopyPath = (id: number, path: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     navigator.clipboard.writeText(path);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1500);
@@ -189,6 +231,7 @@ export const FileListTable: React.FC<FileListTableProps> = ({
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                   onDoubleClick={() => onOpenFile(file.path)}
+                  onContextMenu={(e) => handleRowContextMenu(file, e)}
                   className="grid grid-cols-12 gap-4 px-6 py-2 items-center text-xs hover:bg-[#fbf9f8] transition-colors group cursor-pointer border-b border-[#e4e1dd]"
                 >
                   {/* Name & Path */}
@@ -269,6 +312,61 @@ export const FileListTable: React.FC<FileListTableProps> = ({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Menú Contextual Personalizado al hacer clic derecho */}
+      {contextMenu && (
+        <div
+          style={{
+            position: "fixed",
+            top: `${contextMenu.y}px`,
+            left: `${contextMenu.x}px`,
+            zIndex: 9999,
+          }}
+          className="w-56 bg-[#ffffff] border border-[#d4cfca] rounded-[6px] shadow-lg py-1 text-xs select-none animate-fadeIn font-sans-oracle"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* File header in menu */}
+          <div className="px-3 py-1.5 border-b border-[#e4e1dd] bg-[#fbf9f8] text-[11px] text-[#767069] truncate font-mono-oracle">
+            {contextMenu.file.name}
+          </div>
+
+          {/* Menu Items */}
+          <button
+            onClick={() => {
+              onOpenFile(contextMenu.file.path);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-[#161513] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
+          >
+            <Play className="w-3.5 h-3.5 text-[#312d2a]" />
+            <span>Abrir archivo</span>
+          </button>
+
+          <button
+            onClick={() => {
+              onOpenFolder(contextMenu.file.path);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-[#161513] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
+          >
+            <FolderSymlink className="w-3.5 h-3.5 text-[#312d2a]" />
+            <span>Mostrar en el Explorador</span>
+          </button>
+
+          <div className="h-[1px] bg-[#e4e1dd] my-1" />
+
+          <button
+            onClick={(e) => {
+              handleCopyPath(contextMenu.file.id, contextMenu.file.path, e);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-[#161513] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
+          >
+            <Copy className="w-3.5 h-3.5 text-[#312d2a]" />
+            <span>Copiar ruta absoluta</span>
+          </button>
         </div>
       )}
     </div>

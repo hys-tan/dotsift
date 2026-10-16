@@ -169,6 +169,30 @@ export function App() {
     };
   }, [handleDropDirectories]);
 
+  // Bloquear recargas accidentales (F5, Ctrl+R) y desactivar menú contextual nativo del navegador
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === "F5" ||
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "r")
+      ) {
+        e.preventDefault();
+      }
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("contextmenu", handleContextMenu);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, []);
+
   // Iniciar la exploración (cambiar a Vista 2)
   const handleStartExplore = async () => {
     if (directories.length === 0) return;
