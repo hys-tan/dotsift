@@ -14,6 +14,9 @@ export function App() {
 
   // Estado de directorios (hasta 5)
   const [directories, setDirectories] = useState<string[]>([]);
+  const directoriesRef = useRef<string[]>([]);
+  directoriesRef.current = directories;
+
   const [selectedExtension, setSelectedExtension] = useState<string | null>(null);
 
   // Escaneo y resultados
@@ -65,23 +68,35 @@ export function App() {
     }
   }, []);
 
-  // Agregar una carpeta (hasta 5)
+  const executeScanRef = useRef(executeScan);
+  executeScanRef.current = executeScan;
+
+  // Agregar carpetas mediante explorador de archivos nativo (acumular hasta 5)
   const handleAddDirectory = async () => {
-    if (directories.length >= 5) return;
+    const current = directoriesRef.current;
+    if (current.length >= 5) return;
 
     try {
       const selected = await open({
         directory: true,
-        multiple: false,
+        multiple: true,
         title: "Seleccionar Carpeta para DotSift",
       });
 
-      if (selected && typeof selected === "string") {
-        if (!directories.includes(selected)) {
-          const newDirs = [...directories, selected];
-          setDirectories(newDirs);
-          await executeScan(newDirs);
-        }
+      if (selected) {
+        const selectedList = (Array.isArray(selected) ? selected : [selected]).filter(
+          (s): s is string => typeof s === "string"
+        );
+        const existing = new Set(directoriesRef.current);
+        const toAdd = selectedList.filter((p) => !existing.has(p));
+        if (toAdd.length === 0) return;
+
+        const availableSlots = 5 - directoriesRef.current.length;
+        const added = toAdd.slice(0, availableSlots);
+        const updated = [...directoriesRef.current, ...added];
+        directoriesRef.current = updated;
+        setDirectories(updated);
+        await executeScanRef.current(updated);
       }
     } catch (err) {
       console.error("Error al abrir diálogo de selección:", err);
@@ -90,63 +105,65 @@ export function App() {
 
   // Quitar una carpeta
   const handleRemoveDirectory = async (index: number) => {
-    const updated = directories.filter((_, i) => i !== index);
+    const updated = directoriesRef.current.filter((_, i) => i !== index);
+    directoriesRef.current = updated;
     setDirectories(updated);
     if (updated.length > 0) {
-      await executeScan(updated);
+      await executeScanRef.current(updated);
     } else {
       setScanResult(null);
       setLoadedFiles([]);
     }
   };
 
-  // Manejar carpetas soltadas mediante Drag & Drop (hasta 5)
-  const handleDropDirectories = useCallback(
-    async (newPaths: string[]) => {
-      if (directories.length >= 5) return;
-      const existing = new Set(directories);
-      const toAdd = newPaths.filter((p) => !existing.has(p));
-      if (toAdd.length === 0) return;
+  // Manejar carpetas soltadas mediante Drag & Drop (acumular hasta 5)
+  const handleDropDirectories = useCallback(async (newPaths: string[]) => {
+    const current = directoriesRef.current;
+    if (current.length >= 5) return;
+    const existing = new Set(current);
+    const toAdd = newPaths.filter((p) => !existing.has(p));
+    if (toAdd.length === 0) return;
 
-      const availableSlots = 5 - directories.length;
-      const added = toAdd.slice(0, availableSlots);
-      const updated = [...directories, ...added];
-      setDirectories(updated);
-      await executeScan(updated);
-    },
-    [directories, executeScan]
-  );
+    const availableSlots = 5 - current.length;
+    const added = toAdd.slice(0, availableSlots);
+    const updated = [...current, ...added];
+    directoriesRef.current = updated;
+    setDirectories(updated);
+    await executeScanRef.current(updated);
+  }, []);
 
   // Escuchar eventos nativos de Drag & Drop de Tauri v2
   useEffect(() => {
     let unlisten: (() => void) | null = null;
+    let isCancelled = false;
 
-    try {
-      getCurrentWebview()
-        .onDragDropEvent((event) => {
-          if (event.payload.type === "enter" || event.payload.type === "over") {
-            setIsDraggingOver(true);
-          } else if (event.payload.type === "leave") {
-            setIsDraggingOver(false);
-          } else if (event.payload.type === "drop") {
-            setIsDraggingOver(false);
-            const paths = event.payload.paths;
-            if (paths && paths.length > 0) {
-              handleDropDirectories(paths);
-            }
+    getCurrentWebview()
+      .onDragDropEvent((event) => {
+        if (event.payload.type === "enter" || event.payload.type === "over") {
+          setIsDraggingOver(true);
+        } else if (event.payload.type === "leave") {
+          setIsDraggingOver(false);
+        } else if (event.payload.type === "drop") {
+          setIsDraggingOver(false);
+          const paths = event.payload.paths;
+          if (paths && paths.length > 0) {
+            handleDropDirectories(paths);
           }
-        })
-        .then((fn) => {
+        }
+      })
+      .then((fn) => {
+        if (isCancelled) {
+          fn();
+        } else {
           unlisten = fn;
-        })
-        .catch((err) => {
-          console.warn("Error vinculando onDragDropEvent:", err);
-        });
-    } catch (e) {
-      console.warn("getCurrentWebview error:", e);
-    }
+        }
+      })
+      .catch((err) => {
+        console.warn("Error vinculando onDragDropEvent:", err);
+      });
 
     return () => {
+      isCancelled = true;
       if (unlisten) unlisten();
     };
   }, [handleDropDirectories]);
