@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { SetupView } from "./components/SetupView";
 import { SearchBar } from "./components/SearchBar";
 import { FileListTable } from "./components/FileListTable";
 import { FileItem, ScanResult, SortField, SortOrder } from "./types";
-import { ArrowLeft, Folder } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import "./App.css";
 
 export function App() {
@@ -20,6 +21,7 @@ export function App() {
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgressDuration, setScanProgressDuration] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
 
   // Archivos cargados para la vista de resultados
   const [loadedFiles, setLoadedFiles] = useState<FileItem[]>([]);
@@ -97,6 +99,57 @@ export function App() {
       setLoadedFiles([]);
     }
   };
+
+  // Manejar carpetas soltadas mediante Drag & Drop (hasta 5)
+  const handleDropDirectories = useCallback(
+    async (newPaths: string[]) => {
+      if (directories.length >= 5) return;
+      const existing = new Set(directories);
+      const toAdd = newPaths.filter((p) => !existing.has(p));
+      if (toAdd.length === 0) return;
+
+      const availableSlots = 5 - directories.length;
+      const added = toAdd.slice(0, availableSlots);
+      const updated = [...directories, ...added];
+      setDirectories(updated);
+      await executeScan(updated);
+    },
+    [directories, executeScan]
+  );
+
+  // Escuchar eventos nativos de Drag & Drop de Tauri v2
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+
+    try {
+      getCurrentWebview()
+        .onDragDropEvent((event) => {
+          if (event.payload.type === "enter" || event.payload.type === "over") {
+            setIsDraggingOver(true);
+          } else if (event.payload.type === "leave") {
+            setIsDraggingOver(false);
+          } else if (event.payload.type === "drop") {
+            setIsDraggingOver(false);
+            const paths = event.payload.paths;
+            if (paths && paths.length > 0) {
+              handleDropDirectories(paths);
+            }
+          }
+        })
+        .then((fn) => {
+          unlisten = fn;
+        })
+        .catch((err) => {
+          console.warn("Error vinculando onDragDropEvent:", err);
+        });
+    } catch (e) {
+      console.warn("getCurrentWebview error:", e);
+    }
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [handleDropDirectories]);
 
   // Iniciar la exploración (cambiar a Vista 2)
   const handleStartExplore = async () => {
@@ -207,6 +260,7 @@ export function App() {
           onStartExplore={handleStartExplore}
           errorMsg={errorMsg}
           onClearError={() => setErrorMsg(null)}
+          isDraggingOver={isDraggingOver}
         />
       )}
 
@@ -227,7 +281,6 @@ export function App() {
               <div className="h-4 w-[1px] bg-[#e4e1dd]" />
 
               <div className="flex items-center gap-2 text-xs text-[#767069]">
-                <Folder className="w-3.5 h-3.5 text-[#312d2a]" />
                 <span className="font-sans-oracle">
                   {directories.length} {directories.length === 1 ? "carpeta" : "carpetas"} analizadas
                 </span>

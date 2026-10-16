@@ -79,7 +79,16 @@ pub fn perform_scan_multiple(
     for r in roots {
         let p = Path::new(r);
         if p.exists() && p.is_dir() {
-            valid_roots.push(r.clone());
+            if !valid_roots.contains(r) {
+                valid_roots.push(r.clone());
+            }
+        } else if p.exists() && p.is_file() {
+            if let Some(parent) = p.parent() {
+                let parent_str = parent.to_string_lossy().to_string();
+                if !valid_roots.contains(&parent_str) {
+                    valid_roots.push(parent_str);
+                }
+            }
         }
     }
 

@@ -24,6 +24,7 @@ interface SetupViewProps {
   onStartExplore: () => void;
   errorMsg: string | null;
   onClearError: () => void;
+  isDraggingOver?: boolean;
 }
 
 export const SetupView: React.FC<SetupViewProps> = ({
@@ -38,6 +39,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
   onStartExplore,
   errorMsg,
   onClearError,
+  isDraggingOver,
 }) => {
   const [comboOpen, setComboOpen] = useState(false);
   const [comboSearch, setComboSearch] = useState("");
@@ -93,7 +95,24 @@ export const SetupView: React.FC<SetupViewProps> = ({
       )}
 
       {/* 2. Contenedor Principal (Product-card chrome: Canvas blanco, 1px hairline, 8px radius, NO SHADOWS) */}
-      <div className="bg-[#ffffff] border border-[#e4e1dd] rounded-[8px] p-7 flex flex-col gap-6">
+      <div
+        className={`bg-[#ffffff] border transition-colors rounded-[8px] p-7 flex flex-col gap-6 relative ${
+          isDraggingOver ? "border-[#006b8f] ring-2 ring-[#006b8f]/20 bg-[#f5f4f2]" : "border-[#e4e1dd]"
+        }`}
+      >
+        {/* Overlay cuando se arrastra una carpeta sobre la ventana */}
+        {isDraggingOver && (
+          <div className="absolute inset-0 bg-[#ffffff]/95 rounded-[8px] z-50 flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
+            <Folder className="w-10 h-10 text-[#006b8f] mb-3 animate-bounce" />
+            <h3 className="text-base font-bold text-[#161513] font-sans-oracle mb-1">
+              Suelta las carpetas aquí
+            </h3>
+            <p className="text-xs text-[#767069] font-sans-oracle">
+              Se agregarán automáticamente a la lista de DotSift (hasta 5 directorios).
+            </p>
+          </div>
+        )}
+
         {/* Sección: Directorios */}
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -141,7 +160,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
                 onClick={onAddDirectory}
                 className="border border-dashed border-[#d4cfca] rounded-[6px] p-5 text-center text-xs text-[#161513]/60 hover:border-[#312d2a] hover:text-[#161513] transition-colors cursor-pointer bg-[#fbf9f8]"
               >
-                Haz clic en &quot;Agregar carpeta&quot; para seleccionar de 1 a 5 directorios.
+                Haz clic en &quot;Agregar carpeta&quot; o arrastra y suelta de 1 a 5 directorios aquí.
               </div>
             )}
           </div>
@@ -334,7 +353,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
 
       {/* 5. Footer (Caption style: typography.caption, disabled-ink #aea8a2) */}
       <footer className="text-center pt-8 pb-3 text-xs text-[#aea8a2] font-sans-oracle">
-        <span>DotSift v0.1.0 • Hecho por Kened</span>
+        <span>DotSift v0.1.0 • Made by Eliot</span>
       </footer>
     </div>
   );

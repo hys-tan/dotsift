@@ -114,12 +114,24 @@ fn open_containing_folder(path: String) -> Result<(), String> {
     }
 }
 
+use tauri::Manager;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(ScannerState::new())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                if let Some(icon) = app.default_window_icon() {
+                    let _ = window.set_icon(icon.clone());
+                } else if let Ok(icon) = tauri::image::Image::from_app_icon_resource(32) {
+                    let _ = window.set_icon(icon);
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             scan_directories,
             cancel_scan,
