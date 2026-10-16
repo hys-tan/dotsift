@@ -1,8 +1,12 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/gelasio";
+@import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
 
 @layer base {
   * {
     box-sizing: border-box;
+    letter-spacing: 0;
   }
   body {
     margin: 0;
@@ -10,27 +14,41 @@
     overflow: hidden;
     user-select: none;
     -webkit-user-select: none;
-    background-color: #09090b;
-    color: #f4f4f5;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #fbf9f8;
+    color: #161513;
+    font-family: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* Custom sleek scrollbar */
+.font-serif-oracle {
+  font-family: 'Gelasio Variable', Georgia, serif;
+}
+
+.font-sans-oracle {
+  font-family: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.font-mono-oracle {
+  font-family: 'JetBrains Mono Variable', Consolas, monospace;
+}
+
+/* Warm neutral scrollbar based on Oracle Design System */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #f5f4f2;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 9999px;
+  background: #d4cfca;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: #aea8a2;
 }

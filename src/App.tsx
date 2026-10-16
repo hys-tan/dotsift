@@ -192,7 +192,7 @@ export function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0f1117] text-zinc-100 overflow-hidden font-sans select-none">
+    <div className="flex flex-col h-screen w-screen bg-[#fbf9f8] text-[#161513] overflow-hidden font-sans-oracle select-none">
       {/* VISTA 1: Pantalla de Configuración Inicial */}
       {currentView === "setup" && (
         <SetupView
@@ -212,27 +212,27 @@ export function App() {
 
       {/* VISTA 2: Pantalla de Contenido y Exploración */}
       {currentView === "results" && (
-        <div className="flex-1 flex flex-col h-full overflow-hidden animate-fadeIn">
-          {/* Barra superior de Vista 2 */}
-          <div className="border-b border-zinc-800/80 bg-zinc-950/70 backdrop-blur-md px-5 py-3 flex items-center justify-between gap-4">
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
+          {/* Barra superior de Vista 2 (Oracle masthead/subnav style) */}
+          <div className="border-b border-[#e4e1dd] bg-[#ffffff] px-6 py-3 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setCurrentView("setup")}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-300 border border-zinc-800 hover:bg-zinc-800 hover:text-white transition-all cursor-pointer shadow-sm"
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[4px] text-xs font-medium text-[#161513] border border-[#161513] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Volver a DotSift</span>
               </button>
 
-              <div className="h-4 w-[1px] bg-zinc-800" />
+              <div className="h-4 w-[1px] bg-[#e4e1dd]" />
 
-              <div className="flex items-center gap-2 text-xs text-zinc-400">
-                <Folder className="w-3.5 h-3.5 text-indigo-400" />
-                <span>
+              <div className="flex items-center gap-2 text-xs text-[#767069]">
+                <Folder className="w-3.5 h-3.5 text-[#312d2a]" />
+                <span className="font-sans-oracle">
                   {directories.length} {directories.length === 1 ? "carpeta" : "carpetas"} analizadas
                 </span>
                 {selectedExtension && (
-                  <span className="font-mono text-indigo-300 font-semibold">
+                  <span className="font-mono-oracle text-[#006b8f] font-semibold">
                     (Tipo: .{selectedExtension.toUpperCase()})
                   </span>
                 )}
