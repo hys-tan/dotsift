@@ -201,3 +201,51 @@ pub fn perform_scan_multiple(
 
     Ok((summary, files_by_extension, all_files))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn benchmark_scan() {
+        let test_dir = if Path::new("C:\\Windows\\System32").exists() {
+            "C:\\Windows\\System32".to_string()
+        } else {
+            ".".to_string()
+        };
+
+        println!("\n========== [TEST DE RENDIMIENTO DOTSIFT] ==========");
+        println!("Directorio de prueba: {}", test_dir);
+
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        let start = Instant::now();
+
+        match perform_scan_multiple(&[test_dir], cancel_flag) {
+            Ok((summary, _, _)) => {
+                let elapsed = start.elapsed();
+                let secs = elapsed.as_secs_f64();
+                let rate = if secs > 0.0 {
+                    summary.total_files as f64 / secs
+                } else {
+                    summary.total_files as f64
+                };
+
+                println!("Archivos indexados: {}", summary.total_files);
+                println!("Extensiones detectadas: {}", summary.extensions.len());
+                println!("Tamaño total en disco: {:.2} MB", summary.total_size_bytes as f64 / 1_048_576.0);
+                println!("Tiempo de indexación: {:.3} segundos ({:?})", secs, elapsed);
+                println!("Velocidad de procesamiento: {:.0} archivos/segundo", rate);
+                println!("Top 5 extensiones con más archivos:");
+                for ext in summary.extensions.iter().take(5) {
+                    println!("  - .{:8} | {:6} archivos | {:.2} MB", ext.extension, ext.count, ext.total_size_bytes as f64 / 1_048_576.0);
+                }
+                println!("===================================================\n");
+
+                assert!(summary.total_files > 0);
+            }
+            Err(e) => {
+                panic!("Error durante el escaneo de prueba: {}", e);
+            }
+        }
+    }
+}
