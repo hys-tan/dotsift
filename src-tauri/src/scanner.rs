@@ -36,7 +36,6 @@ pub struct ScanResult {
 
 pub struct ScannerState {
     pub files_by_extension: Mutex<HashMap<String, Vec<FileItem>>>,
-    pub all_files: Mutex<Vec<FileItem>>,
     pub current_roots: Mutex<Vec<String>>,
     pub cancel_flag: Arc<AtomicBool>,
 }
@@ -45,7 +44,6 @@ impl ScannerState {
     pub fn new() -> Self {
         Self {
             files_by_extension: Mutex::new(HashMap::new()),
-            all_files: Mutex::new(Vec::new()),
             current_roots: Mutex::new(Vec::new()),
             cancel_flag: Arc::new(AtomicBool::new(false)),
         }
@@ -67,7 +65,7 @@ pub fn categorize_extension(ext: &str) -> &'static str {
 pub fn perform_scan_multiple(
     roots: &[String],
     cancel_flag: Arc<AtomicBool>,
-) -> Result<(ScanResult, HashMap<String, Vec<FileItem>>, Vec<FileItem>), String> {
+) -> Result<(ScanResult, HashMap<String, Vec<FileItem>>), String> {
     cancel_flag.store(false, Ordering::Relaxed);
     let start_time = Instant::now();
 
@@ -97,7 +95,6 @@ pub fn perform_scan_multiple(
     }
 
     let mut files_by_extension: HashMap<String, Vec<FileItem>> = HashMap::new();
-    let mut all_files: Vec<FileItem> = Vec::new();
     let mut total_size_bytes: u64 = 0;
     let mut current_id: usize = 0;
 
@@ -167,8 +164,7 @@ pub fn perform_scan_multiple(
             files_by_extension
                 .entry(ext)
                 .or_insert_with(Vec::new)
-                .push(item.clone());
-            all_files.push(item);
+                .push(item);
         }
     }
 
@@ -199,7 +195,7 @@ pub fn perform_scan_multiple(
         extensions,
     };
 
-    Ok((summary, files_by_extension, all_files))
+    Ok((summary, files_by_extension))
 }
 
 #[cfg(test)]
@@ -221,7 +217,7 @@ mod tests {
         let start = Instant::now();
 
         match perform_scan_multiple(&[test_dir], cancel_flag) {
-            Ok((summary, _, _)) => {
+            Ok((summary, _)) => {
                 let elapsed = start.elapsed();
                 let secs = elapsed.as_secs_f64();
                 let rate = if secs > 0.0 {

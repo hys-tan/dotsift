@@ -18,13 +18,10 @@ async fn scan_directories(
     .await
     .map_err(|e| format!("Error en el hilo de escaneo: {}", e))??;
 
-    let (summary, files_by_ext, all) = result;
+    let (summary, files_by_ext) = result;
 
     if let Ok(mut ext_map) = state.files_by_extension.lock() {
         *ext_map = files_by_ext;
-    }
-    if let Ok(mut all_list) = state.all_files.lock() {
-        *all_list = all;
     }
     if let Ok(mut roots_guard) = state.current_roots.lock() {
         *roots_guard = paths;
@@ -57,11 +54,11 @@ fn get_filtered_files(
             ext_map.get(ext).cloned().unwrap_or_default()
         }
         _ => {
-            let all_list = state
-                .all_files
+            let ext_map = state
+                .files_by_extension
                 .lock()
-                .map_err(|_| "Error al bloquear lista de archivos".to_string())?;
-            all_list.clone()
+                .map_err(|_| "Error al bloquear mapa de extensiones".to_string())?;
+            ext_map.values().flatten().cloned().collect()
         }
     };
 

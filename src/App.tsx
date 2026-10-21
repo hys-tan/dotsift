@@ -286,6 +286,13 @@ export function App() {
     }
   };
 
+  // Opción para volver a Vista 1 modificando filtro (libera la memoria RAM de JavaScript de archivos cargados)
+  const handleModifyFilter = () => {
+    setLoadedFiles([]);
+    setSearchQuery("");
+    setCurrentView("setup");
+  };
+
   // Opción para reiniciar a cero toda la aplicación
   const handleResetAll = () => {
     setDirectories([]);
@@ -335,7 +342,7 @@ export function App() {
             <div className="flex items-center gap-2">
               {/* Opción 1: Modificar filtro (conserva carpetas y escaneo) */}
               <button
-                onClick={() => setCurrentView("setup")}
+                onClick={handleModifyFilter}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-medium text-[#161513] border border-[#d4cfca] hover:bg-[#f5f4f2] transition-colors cursor-pointer"
                 title="Volver para cambiar extensión o carpetas conservando el escaneo"
               >
